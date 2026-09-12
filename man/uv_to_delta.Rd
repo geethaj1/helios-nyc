@@ -11,7 +11,7 @@ uv_to_delta(f, E_avg, k)
 in \verb{[0, 1]}).}
 
 \item{E_avg}{Average fluence rate within the irradiated volume
-(mW/cm^2 or equivalent unit consistent with \code{k}).}
+(µW/cm^2 for far-UVC, or any unit consistent with \code{k}).}
 
 \item{k}{UV inactivation constant for the target pathogen
 (units consistent with \code{E_avg}; product \code{E_avg * k} is per-second).}

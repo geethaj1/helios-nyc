@@ -108,21 +108,31 @@ generate_joint_intervention_switches <- function(parameters_list, variables_list
       }
     }
   } else if (parameters_list[["intervention_joint_coverage_type"]] == "targeted_riskiness") {
-    riskiness_list <- list(
-      "workplace" = parameters_list$workplace_specific_riskiness,
-      "school"    = parameters_list$school_specific_riskiness,
-      "leisure"   = parameters_list$leisure_specific_riskiness
+    # Rank by absolute Wells-Riley infection probability rather than by
+    # per-setting riskiness. Riskiness is normalised against each setting's own
+    # median, so equal riskiness values in different settings do not represent
+    # equal absolute risk and are not comparable once pooled across settings.
+    p_inf_list <- list(
+      "workplace" = ach_to_p_inf(
+        parameters_list$workplace_specific_ach, parameters_list, "workplace"
+      ),
+      "school"    = ach_to_p_inf(
+        parameters_list$school_specific_ach, parameters_list, "school"
+      ),
+      "leisure"   = ach_to_p_inf(
+        parameters_list$leisure_specific_ach, parameters_list, "leisure"
+      )
     )
-    riskiness_flat   <- unlist(riskiness_list, use.names = FALSE)
-    riskiness_sorted <- sort(
-      x = riskiness_flat,
+    p_inf_flat   <- unlist(p_inf_list, use.names = FALSE)
+    p_inf_sorted <- sort(
+      x = p_inf_flat,
       decreasing = TRUE,
       index.return = TRUE
     )
     final_index <- min(which(
-      cumsum(setting_size_flat[riskiness_sorted$ix]) >= total_with_intervention
+      cumsum(setting_size_flat[p_inf_sorted$ix]) >= total_with_intervention
     ))
-    indices <- riskiness_sorted$ix[1:final_index]
+    indices <- p_inf_sorted$ix[1:final_index]
   } else {
     stop(
       "intervention_joint_coverage_type must be either random or targeted_riskiness"
@@ -251,7 +261,7 @@ generate_setting_intervention_switches <- function(
 #' the extra equivalent ACH (eACH) the intervention adds to each covered
 #' location. The function can either return a constant (same delta for every
 #' covered location) or a value that depends on the location's baseline ACH.
-#' Optional unit-to-unit variation can be added via `variation_function`.
+#' Optional unit-to-unit variation can be added via `variation`.
 #'
 #' @param name A character string used as a human-readable label for the
 #' intervention.
@@ -266,16 +276,17 @@ generate_setting_intervention_switches <- function(
 #' baseline ACH.
 #' @param delta_params A named list of additional arguments passed to
 #' `delta_function`. Default = `list()`.
-#' @param variation Logical. If `TRUE`, location-to-location noise is added
-#' to the delta using `variation_function`. Default = `FALSE`.
-#' @param variation_function A noise-generating function (e.g. `rnorm`)
-#' called as `variation_function(n_locations, <variation_params>)`.
-#' @param variation_params A named list of additional arguments passed to
-#' `variation_function`. Default = `list()`.
+#' @param variation Logical. If `TRUE`, each location's delta is multiplied by
+#' an independent lognormal draw with mean 1, so that unit-to-unit variation
+#' does not shift the mean delta. Default = `FALSE`.
+#' @param variation_params A named list supplying `sdlog`, the standard
+#' deviation on the log scale of the lognormal multiplier (dimensionless;
+#' approximately the relative error for small values). Required when
+#' `variation = TRUE`. Default = `list()`.
 #' @param coverage Numeric in `[0, 1]`. Fraction of total setting size to
 #' cover when the intervention is installed.
 #'
-#' @return A named list with the eight fields above, used as the intervention
+#' @return A named list with the seven fields above, used as the intervention
 #' object consumed by [set_intervention_ach()] and downstream pipeline.
 #'
 #' @family intervention
@@ -285,16 +296,24 @@ make_intervention <- function(name,
                               delta_function    = NULL,
                               delta_params      = list(),
                               variation                = FALSE,
-                              variation_function       = NULL,
                               variation_params         = list(),
                               coverage                 = NULL) {
+  if (isTRUE(variation)) {
+    sdlog <- variation_params$sdlog
+    if (is.null(sdlog) || !is.numeric(sdlog) || length(sdlog) != 1 || sdlog < 0) {
+      stop(
+        "Error: variation_params must supply a single non-negative 'sdlog' ",
+        "when variation is TRUE"
+      )
+    }
+  }
+
   list(
     name                     = name,
     delta_depends_on_baseline_ach = delta_depends_on_baseline_ach,
     delta_function    = delta_function,
     delta_params      = delta_params,
     variation                = variation,
-    variation_function       = variation_function,
     variation_params         = variation_params,
     coverage                 = coverage
   )
@@ -407,7 +426,7 @@ set_intervention_ach <- function(parameters_list,
 #' `efficacy = 0` and so leave FOI unchanged downstream.
 #'
 #' The intervention's delta per location is determined by the intervention
-#' object's `delta_function` (and `delta_params`, `variation_function`,
+#' object's `delta_function` (and `delta_params`, `variation`,
 #' `variation_params`); see [make_intervention()].
 #'
 #' Called once at simulation init from [create_variables()].
@@ -468,11 +487,13 @@ calculate_efficacy_from_ach <- function(ach_values, parameters_list, setting) {
     )
   }
 
-  # Add location-to-location variation if requested
-  if (intervention$variation && !is.null(intervention$variation_function)) {
-    noise   <- do.call(intervention$variation_function,
-                       c(list(n), intervention$variation_params))
-    delta_i <- pmax(0, delta_i + noise)
+  # Add location-to-location variation if requested. The multiplier is lognormal
+  # with meanlog = -sdlog^2 / 2, which gives E[multiplier] = 1, so variation does
+  # not shift the mean delta. Additive noise truncated at zero would inflate it.
+  # A lognormal is strictly positive, so no clamping is required.
+  if (intervention$variation) {
+    sdlog   <- intervention$variation_params$sdlog
+    delta_i <- delta_i * stats::rlnorm(n, meanlog = -sdlog^2 / 2, sdlog = sdlog)
   }
 
   # Zero out delta for uncovered locations
@@ -488,7 +509,18 @@ calculate_efficacy_from_ach <- function(ach_values, parameters_list, setting) {
   p_pre  <- 1 - exp(-r * (I * pi / (alpha_pre  * V)) * RRtv * t)
   p_post <- 1 - exp(-r * (I * pi / (alpha_post * V)) * RRtv * t)
 
-  return(1 - p_post / p_pre)
+  efficacy <- 1 - p_post / p_pre
+
+  # A negative efficacy would be applied downstream as an FOI multiplier greater
+  # than one, silently amplifying transmission, so fail loudly instead.
+  if (any(!is.finite(efficacy)) || any(efficacy < 0) || any(efficacy > 1)) {
+    stop(
+      "Error: computed efficacy outside [0, 1] - check that delta_function ",
+      "returns non-negative values for every location"
+    )
+  }
+
+  return(efficacy)
 }
 
 
@@ -508,7 +540,7 @@ calculate_efficacy_from_ach <- function(ach_values, parameters_list, setting) {
 #' @param f Fraction of the room volume that is irradiated (dimensionless,
 #' in `[0, 1]`).
 #' @param E_avg Average fluence rate within the irradiated volume
-#' (mW/cm^2 or equivalent unit consistent with `k`).
+#' (µW/cm^2 for far-UVC, or any unit consistent with `k`).
 #' @param k UV inactivation constant for the target pathogen
 #' (units consistent with `E_avg`; product `E_avg * k` is per-second).
 #'

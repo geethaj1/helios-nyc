@@ -34,7 +34,7 @@ baseline ACH. Uncovered locations get \code{delta = 0}, which gives
 \code{efficacy = 0} and so leave FOI unchanged downstream.
 
 The intervention's delta per location is determined by the intervention
-object's \code{delta_function} (and \code{delta_params}, \code{variation_function},
+object's \code{delta_function} (and \code{delta_params}, \code{variation},
 \code{variation_params}); see \code{\link[=make_intervention]{make_intervention()}}.
 
 Called once at simulation init from \code{\link[=create_variables]{create_variables()}}.

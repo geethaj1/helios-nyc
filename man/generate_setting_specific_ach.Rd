@@ -44,6 +44,7 @@ intervention is active) by \code{\link[=calculate_efficacy_from_ach]{calculate_e
 }
 \seealso{
 Other setting-specific ACH: 
+\code{\link{ach_to_p_inf}()},
 \code{\link{convert_ach_to_riskiness}()},
 \code{\link{set_default_ach}()},
 \code{\link{set_setting_specific_ach}()}

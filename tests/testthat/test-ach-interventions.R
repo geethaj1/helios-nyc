@@ -156,17 +156,17 @@ test_that("set_intervention_ach() additionally populates intervention_joint_cove
 #===== generate_setting_specific_ach() / riskiness =====#
 #====================================================#
 
-test_that("generate_setting_specific_ach() errors if neither setting-specific nor default ACH configured", {
+test_that("generate_setting_specific_ach() uses built-in default when no explicit ACH configured", {
   parameters <- get_parameters()
 
-  expect_error(
-    object = generate_setting_specific_ach(
-      parameters_list = parameters,
-      setting = "workplace",
-      number_of_locations = 10
-    ),
-    regexp = "ACH for the workplace setting has not been configured"
+  ach <- generate_setting_specific_ach(
+    parameters_list = parameters,
+    setting = "workplace",
+    number_of_locations = 10
   )
+
+  expect_length(ach, 10)
+  expect_true(all(ach == parameters$default_ach_workplace))
 })
 
 test_that("generate_setting_specific_ach() returns a uniform vector when set_default_ach() used", {
@@ -222,7 +222,7 @@ test_that("set_default_ach() errors if ach is negative or not a single numeric",
   )
 })
 
-test_that("convert_ach_to_riskiness() anchors riskiness at ~1 for the median ACH location", {
+test_that("convert_ach_to_riskiness() anchors so mean riskiness is 1", {
   parameters <- get_parameters()
   ach_values <- c(1, 2, 4, 8, 16)
 
@@ -232,7 +232,7 @@ test_that("convert_ach_to_riskiness() anchors riskiness at ~1 for the median ACH
     setting = "workplace"
   )
 
-  expect_equal(riskiness[3], 1) # location with the median ACH (4)
+  expect_equal(mean(riskiness), 1, tolerance = 1e-10)
 })
 
 test_that("convert_ach_to_riskiness() is monotonically decreasing in baseline ACH", {
@@ -369,8 +369,7 @@ test_that("calculate_efficacy_from_ach() adds location-to-location variation whe
     delta_function = function(delta) delta,
     delta_params = list(delta = 5),
     variation = TRUE,
-    variation_function = rnorm,
-    variation_params = list(sd = 0.01),
+    variation_params = list(sdlog = 0.01),
     coverage = 1
   )
   parameters <- set_intervention_ach(
@@ -392,15 +391,14 @@ test_that("calculate_efficacy_from_ach() adds location-to-location variation whe
   expect_gt(length(unique(efficacy)), 1)
 })
 
-test_that("calculate_efficacy_from_ach() never produces a negative delta even with downward variation noise", {
+test_that("calculate_efficacy_from_ach() never produces a negative delta even with large variation", {
   parameters <- get_parameters()
   intervention <- make_intervention(
     name = "small_delta_with_large_variation",
     delta_function = function(delta) delta,
     delta_params = list(delta = 0.1),
     variation = TRUE,
-    variation_function = rnorm,
-    variation_params = list(sd = 5),
+    variation_params = list(sdlog = 1),
     coverage = 1
   )
   parameters <- set_intervention_ach(
@@ -419,9 +417,51 @@ test_that("calculate_efficacy_from_ach() never produces a negative delta even wi
     setting = "workplace"
   )
 
-  # Delta is clamped at 0 (pmax(0, ...)), so efficacy should never go
-  # negative (an intervention can never make things worse):
+  # The lognormal multiplier is strictly positive, so delta can never fall
+  # below zero and an intervention can never make ventilation worse:
   expect_true(all(efficacy >= 0))
+})
+
+test_that("calculate_efficacy_from_ach() variation does not inflate the mean delta", {
+  build_parameters <- function(variation, sdlog = NULL) {
+    intervention <- make_intervention(
+      name = "constant_delta",
+      delta_function = function(delta) delta,
+      delta_params = list(delta = 5),
+      variation = variation,
+      variation_params = if (variation) list(sdlog = sdlog) else list(),
+      coverage = 1
+    )
+    set_intervention_ach(
+      parameters_list = get_parameters(),
+      setting = "workplace",
+      coverage_target = "individuals",
+      coverage_type = "random",
+      timestep = 1,
+      intervention = intervention
+    )
+  }
+
+  ach_values <- rep(4, 5000)
+
+  efficacy_no_variation <- calculate_efficacy_from_ach(
+    ach_values = ach_values,
+    parameters_list = build_parameters(variation = FALSE),
+    setting = "workplace"
+  )
+
+  set.seed(1)
+  efficacy_with_variation <- calculate_efficacy_from_ach(
+    ach_values = ach_values,
+    parameters_list = build_parameters(variation = TRUE, sdlog = 0.5),
+    setting = "workplace"
+  )
+
+  # The lognormal multiplier has mean 1, so variation preserves the mean delta.
+  # Efficacy is concave in delta, so mean efficacy under variation must sit at
+  # or below the no-variation value. Additive noise truncated at zero would
+  # inflate the mean delta and push mean efficacy above it.
+  expect_lte(mean(efficacy_with_variation), mean(efficacy_no_variation))
 })
 
 #=========================================================#

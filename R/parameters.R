@@ -69,23 +69,23 @@
 #'
 #' Setting-Specific ACH Parameters:
 #' * `setting_specific_ach_workplace`: boolean switch set to TRUE if setting-specific ACH parameterised in the workplace setting using `set_setting_specific_ach()`; default = FALSE
-#' * `setting_specific_ach_workplace_mean`: The mean of the  truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default =4.8
-#' * `setting_specific_ach_workplace_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default =1.5
+#' * `setting_specific_ach_workplace_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 3.1
+#' * `setting_specific_ach_workplace_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 2.35
 #' * `setting_specific_ach_school`: boolean switch set to TRUE if setting-specific ACH parameterised in the school setting using `set_setting_specific_ach()`; default = FALSE
-#' * `setting_specific_ach_school_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 4.0
-#' * `setting_specific_ach_school_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.2
+#' * `setting_specific_ach_school_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 3.3
+#' * `setting_specific_ach_school_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.95
 #' * `setting_specific_ach_leisure`: boolean switch set to TRUE if setting-specific ACH parameterised in the leisure setting using `set_setting_specific_ach()`; default = FALSE
-#' * `setting_specific_ach_leisure_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual leisure locations is drawn; default = 3.0
-#' * `setting_specific_ach_leisure_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual leisure settings is drawn; default = 1.0
+#' * `setting_specific_ach_leisure_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual leisure locations is drawn; default = 3.5
+#' * `setting_specific_ach_leisure_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual leisure settings is drawn; default = 2.73
 #' * `setting_specific_ach_household`: boolean switch set to TRUE if setting-specific ACH parameterised in the household setting using `set_setting_specific_ach()`; default = FALSE
-#' * `setting_specific_ach_household_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.5
-#' * `setting_specific_ach_household_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.2
+#' * `setting_specific_ach_household_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 2.0
+#' * `setting_specific_ach_household_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.80
 #'
 #' Default (Uniform) ACH Parameters (used when `setting_specific_ach_<setting>` is FALSE; if both are unset, `generate_setting_specific_ach()` errors):
-#' * `default_ach_workplace`: uniform ACH assigned to every workplace location when `setting_specific_ach_workplace` is FALSE. Set via [set_default_ach()]. Default = NULL (must be set explicitly).
-#' * `default_ach_school`: uniform ACH assigned to every school location when `setting_specific_ach_school` is FALSE. Default = NULL.
-#' * `default_ach_leisure`: uniform ACH assigned to every leisure location when `setting_specific_ach_leisure` is FALSE. Default = NULL.
-#' * `default_ach_household`: uniform ACH assigned to every household location when `setting_specific_ach_household` is FALSE. Default = NULL.
+#' * `default_ach_workplace`: uniform ACH assigned to every workplace location when `setting_specific_ach_workplace` is FALSE. Set via [set_default_ach()]. Default = 3.1.
+#' * `default_ach_school`: uniform ACH assigned to every school location when `setting_specific_ach_school` is FALSE. Default = 3.3.
+#' * `default_ach_leisure`: uniform ACH assigned to every leisure location when `setting_specific_ach_leisure` is FALSE. Default = 3.5.
+#' * `default_ach_household`: uniform ACH assigned to every household location when `setting_specific_ach_household` is FALSE. Default = 2.0.
 #'
 #' Volume Per Person Parameters (used in the Wells-Riley calculation; units: m^3 per person):
 #' * `volume_per_person_workplace`: average air volume per person in a workplace; default = 27 (assumes ~10 m^2 floor area at 2.7 m height)
@@ -175,32 +175,31 @@ get_parameters <- function(overrides = list(), archetype = "none") {
 
     # Setting-Specific ACH Parameters: Workplace
     setting_specific_ach_workplace = FALSE,
-    setting_specific_ach_workplace_mean = NULL,
-    setting_specific_ach_workplace_sd = NULL,
+    setting_specific_ach_workplace_mean = 3.1,
+    setting_specific_ach_workplace_sd = 2.35,
 
 
     # Setting-Specific ACH Parameters: School
     setting_specific_ach_school = FALSE,
-    setting_specific_ach_school_mean = NULL,
-    setting_specific_ach_school_sd = NULL,
+    setting_specific_ach_school_mean = 3.3,
+    setting_specific_ach_school_sd = 1.95,
 
     # Setting-Specific ACH Parameters: Leisure
     setting_specific_ach_leisure = FALSE,
-    setting_specific_ach_leisure_mean = NULL,
-    setting_specific_ach_leisure_sd = NULL,
+    setting_specific_ach_leisure_mean = 3.5,
+    setting_specific_ach_leisure_sd = 2.73,
 
     # Setting-Specific ACH Parameters: Household
     setting_specific_ach_household = FALSE,
-    setting_specific_ach_household_mean = NULL,
-    setting_specific_ach_household_sd = NULL,
+    setting_specific_ach_household_mean = 2.0,
+    setting_specific_ach_household_sd = 0.80,
 
     # Default (uniform) ACH per setting, used when setting_specific_ach_<setting>
-    # is FALSE. NULL means "not configured" — generate_setting_specific_ach()
-    # will error if both the switch is FALSE and the default is NULL.
-    default_ach_workplace = NULL,
-    default_ach_school    = NULL,
-    default_ach_leisure   = NULL,
-    default_ach_household = NULL,
+    # is FALSE. Overridden by set_default_ach().
+    default_ach_workplace = 3.1,
+    default_ach_school    = 3.3,
+    default_ach_leisure   = 3.5,
+    default_ach_household = 2.0,
 
     # Volume per person parameters (density values, m^3, room heights are assumptions)
     volume_per_person_workplace = 27, #10m^2 *2.7m

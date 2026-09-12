@@ -22,7 +22,7 @@ or \code{"household"}. Used to select the appropriate \verb{volume_per_person_*}
 }
 \value{
 Numeric vector of per-location riskiness values, same length as
-\code{ach_values}, anchored so the median location has riskiness ~ 1.
+\code{ach_values}, anchored so mean riskiness across locations is exactly 1.
 }
 \description{
 Applies the Wells-Riley framework to convert each location's baseline ACH
@@ -47,6 +47,7 @@ per-setting FOI.
 }
 \seealso{
 Other setting-specific ACH: 
+\code{\link{ach_to_p_inf}()},
 \code{\link{generate_setting_specific_ach}()},
 \code{\link{set_default_ach}()},
 \code{\link{set_setting_specific_ach}()}

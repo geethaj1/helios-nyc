@@ -76,25 +76,25 @@ Rendering Parameters
 Setting-Specific ACH Parameters:
 \itemize{
 \item \code{setting_specific_ach_workplace}: boolean switch set to TRUE if setting-specific ACH parameterised in the workplace setting using \code{set_setting_specific_ach()}; default = FALSE
-\item \code{setting_specific_ach_workplace_mean}: The mean of the  truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default =4.8
-\item \code{setting_specific_ach_workplace_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default =1.5
+\item \code{setting_specific_ach_workplace_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 3.1
+\item \code{setting_specific_ach_workplace_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 2.35
 \item \code{setting_specific_ach_school}: boolean switch set to TRUE if setting-specific ACH parameterised in the school setting using \code{set_setting_specific_ach()}; default = FALSE
-\item \code{setting_specific_ach_school_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 4.0
-\item \code{setting_specific_ach_school_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.2
+\item \code{setting_specific_ach_school_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 3.3
+\item \code{setting_specific_ach_school_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.95
 \item \code{setting_specific_ach_leisure}: boolean switch set to TRUE if setting-specific ACH parameterised in the leisure setting using \code{set_setting_specific_ach()}; default = FALSE
-\item \code{setting_specific_ach_leisure_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual leisure locations is drawn; default = 3.0
-\item \code{setting_specific_ach_leisure_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual leisure settings is drawn; default = 1.0
+\item \code{setting_specific_ach_leisure_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual leisure locations is drawn; default = 3.5
+\item \code{setting_specific_ach_leisure_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual leisure settings is drawn; default = 2.73
 \item \code{setting_specific_ach_household}: boolean switch set to TRUE if setting-specific ACH parameterised in the household setting using \code{set_setting_specific_ach()}; default = FALSE
-\item \code{setting_specific_ach_household_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.5
-\item \code{setting_specific_ach_household_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.2
+\item \code{setting_specific_ach_household_mean}: The mean of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 2.0
+\item \code{setting_specific_ach_household_sd}: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual households is drawn; default = 0.80
 }
 
 Default (Uniform) ACH Parameters (used when \verb{setting_specific_ach_<setting>} is FALSE; if both are unset, \code{generate_setting_specific_ach()} errors):
 \itemize{
-\item \code{default_ach_workplace}: uniform ACH assigned to every workplace location when \code{setting_specific_ach_workplace} is FALSE. Set via \code{\link[=set_default_ach]{set_default_ach()}}. Default = NULL (must be set explicitly).
-\item \code{default_ach_school}: uniform ACH assigned to every school location when \code{setting_specific_ach_school} is FALSE. Default = NULL.
-\item \code{default_ach_leisure}: uniform ACH assigned to every leisure location when \code{setting_specific_ach_leisure} is FALSE. Default = NULL.
-\item \code{default_ach_household}: uniform ACH assigned to every household location when \code{setting_specific_ach_household} is FALSE. Default = NULL.
+\item \code{default_ach_workplace}: uniform ACH assigned to every workplace location when \code{setting_specific_ach_workplace} is FALSE. Set via \code{\link[=set_default_ach]{set_default_ach()}}. Default = 3.1.
+\item \code{default_ach_school}: uniform ACH assigned to every school location when \code{setting_specific_ach_school} is FALSE. Default = 3.3.
+\item \code{default_ach_leisure}: uniform ACH assigned to every leisure location when \code{setting_specific_ach_leisure} is FALSE. Default = 3.5.
+\item \code{default_ach_household}: uniform ACH assigned to every household location when \code{setting_specific_ach_household} is FALSE. Default = 2.0.
 }
 
 Volume Per Person Parameters (used in the Wells-Riley calculation; units: m^3 per person):

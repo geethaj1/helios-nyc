@@ -10,7 +10,6 @@ make_intervention(
   delta_function = NULL,
   delta_params = list(),
   variation = FALSE,
-  variation_function = NULL,
   variation_params = list(),
   coverage = NULL
 )
@@ -33,20 +32,20 @@ baseline ACH.}
 \item{delta_params}{A named list of additional arguments passed to
 \code{delta_function}. Default = \code{list()}.}
 
-\item{variation}{Logical. If \code{TRUE}, location-to-location noise is added
-to the delta using \code{variation_function}. Default = \code{FALSE}.}
+\item{variation}{Logical. If \code{TRUE}, each location's delta is multiplied by
+an independent lognormal draw with mean 1, so that unit-to-unit variation
+does not shift the mean delta. Default = \code{FALSE}.}
 
-\item{variation_function}{A noise-generating function (e.g. \code{rnorm})
-called as \verb{variation_function(n_locations, <variation_params>)}.}
-
-\item{variation_params}{A named list of additional arguments passed to
-\code{variation_function}. Default = \code{list()}.}
+\item{variation_params}{A named list supplying \code{sdlog}, the standard
+deviation on the log scale of the lognormal multiplier (dimensionless;
+approximately the relative error for small values). Required when
+\code{variation = TRUE}. Default = \code{list()}.}
 
 \item{coverage}{Numeric in \verb{[0, 1]}. Fraction of total setting size to
 cover when the intervention is installed.}
 }
 \value{
-A named list with the eight fields above, used as the intervention
+A named list with the seven fields above, used as the intervention
 object consumed by \code{\link[=set_intervention_ach]{set_intervention_ach()}} and downstream pipeline.
 }
 \description{
@@ -56,7 +55,7 @@ per-location ventilation is encoded by \code{delta_function}, which returns
 the extra equivalent ACH (eACH) the intervention adds to each covered
 location. The function can either return a constant (same delta for every
 covered location) or a value that depends on the location's baseline ACH.
-Optional unit-to-unit variation can be added via \code{variation_function}.
+Optional unit-to-unit variation can be added via \code{variation}.
 }
 \seealso{
 Other intervention: 
