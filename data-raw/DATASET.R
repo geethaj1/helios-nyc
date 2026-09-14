@@ -87,17 +87,41 @@ schools_usa <- schools_usa |>
   select(year, type, size, size_midpoint, percent, total, count)
 usethis::use_data(schools_usa, overwrite = TRUE)
 
-baseline_household_demographics_usa <- read.delim(
-  "data-raw/sanFrancisco_RTIsynthPop_ageHH_data.txt"
+# New York City (five boroughs) household age composition from the RTI synthetic
+# population, generated with https://github.com/RTIInternational/rti_synth_pop
+# (2019 ACS 5-year, STATE_INFO = [("NY", "36")]). Task 6 was modified to use
+# stochastic rounding of IPF counts; the original nearest-integer rounding dropped
+# about a fifth of NYC households and under-represented large households.
+# The pipeline outputs are not stored in this repository; set rti_data_dir to the
+# local rti_synth_pop data directory.
+rti_data_dir <- path.expand("~/rti_synth_pop/data")
+nyc_county_fips <- c("36005", "36047", "36061", "36081", "36085")
+
+nyc_households <- arrow::read_parquet(
+  file.path(rti_data_dir, "interim", "36_2019_households.parquet"),
+  col_select = c("hh_id", "county_fips")
 ) |>
-  dplyr::select(sp_id, sp_hh_id, age) |>
-  dplyr::rename(person_id = sp_id, household_id = sp_hh_id, age = age) |>
-  dplyr::group_by(household_id) |>
+  dplyr::filter(county_fips %in% nyc_county_fips)
+
+nyc_persons <- arrow::read_parquet(
+  file.path(rti_data_dir, "processed", "36_2019_persons.parquet"),
+  col_select = c("hh_id", "agep")
+) |>
+  dplyr::semi_join(nyc_households, by = "hh_id")
+
+# Age classes use the same cut-offs as the previous San Francisco panel.
+baseline_household_demographics_usa <- nyc_persons |>
+  dplyr::group_by(hh_id) |>
   dplyr::summarise(
-    child = sum(age <= 18),
-    adult = sum(age > 18 & age <= 69),
-    elderly = sum(age >= 70),
-    household_size = child + adult + elderly
+    child = sum(agep <= 18),
+    adult = sum(agep > 18 & agep <= 69),
+    elderly = sum(agep >= 70),
+    .groups = "drop"
   ) |>
   dplyr::select(child, adult, elderly)
+
+stopifnot(
+  nrow(baseline_household_demographics_usa) == nrow(nyc_households),
+  all(rowSums(baseline_household_demographics_usa) >= 1)
+)
 usethis::use_data(baseline_household_demographics_usa, overwrite = TRUE)
