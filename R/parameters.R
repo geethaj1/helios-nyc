@@ -71,9 +71,9 @@
 #' * `setting_specific_ach_workplace`: boolean switch set to TRUE if setting-specific ACH parameterised in the workplace setting using `set_setting_specific_ach()`; default = FALSE
 #' * `setting_specific_ach_workplace_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 3.1
 #' * `setting_specific_ach_workplace_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual workplaces is drawn; default = 2.35
-#' * `setting_specific_ach_school`: boolean switch set to TRUE if setting-specific ACH parameterised in the school setting using `set_setting_specific_ach()`; default = TRUE (NYC analysis)
-#' * `setting_specific_ach_school_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.35. Together with the default sd, this yields a realised (post-truncation) mean of 2.0 and SD of 1.3 ACH, matching school-day classroom air change rates measured in 37 recently constructed or renovated US schools (Batterman et al. 2017, Indoor Air, doi:10.1111/ina.12384)
-#' * `setting_specific_ach_school_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.73 (see `setting_specific_ach_school_mean`)
+#' * `setting_specific_ach_school`: boolean switch set to TRUE if setting-specific ACH parameterised in the school setting using `set_setting_specific_ach()`; default = FALSE
+#' * `setting_specific_ach_school_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 3.3
+#' * `setting_specific_ach_school_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual schools is drawn; default = 1.95
 #' * `setting_specific_ach_leisure`: boolean switch set to TRUE if setting-specific ACH parameterised in the leisure setting using `set_setting_specific_ach()`; default = FALSE
 #' * `setting_specific_ach_leisure_mean`: The mean of the truncated normal distribution from which the setting-specific ACH of individual leisure locations is drawn; default = 3.5
 #' * `setting_specific_ach_leisure_sd`: The standard deviation of the truncated normal distribution from which the setting-specific ACH of individual leisure settings is drawn; default = 2.73
@@ -180,16 +180,9 @@ get_parameters <- function(overrides = list(), archetype = "none") {
 
 
     # Setting-Specific ACH Parameters: School
-    # NYC analysis: Batterman et al. (2017), Indoor Air, doi:10.1111/ina.12384,
-    # measured school-day classroom air change rates of 2.0 +/- 1.3 per hour in
-    # 37 recently constructed or renovated US schools. Because ACH is drawn from
-    # a normal distribution truncated at 0, the inputs below were solved so that
-    # the realised distribution has mean 2.0 and SD 1.3 (the untruncated values
-    # 2.0 and 1.3 would give a realised mean of about 2.17 and SD of 1.15).
-    # Sensitivity analyses override these with set_setting_specific_ach().
-    setting_specific_ach_school = TRUE,
-    setting_specific_ach_school_mean = 1.35,
-    setting_specific_ach_school_sd = 1.73,
+    setting_specific_ach_school = FALSE,
+    setting_specific_ach_school_mean = 3.3,
+    setting_specific_ach_school_sd = 1.95,
 
     # Setting-Specific ACH Parameters: Leisure
     setting_specific_ach_leisure = FALSE,
