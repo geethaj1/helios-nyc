@@ -6,7 +6,7 @@
 \title{Data from RTI Synthetic population of USA containing information on household size and
 age distribution. Selected for the county of San Francisco.}
 \format{
-An object of class \code{tbl_df} (inherits from \code{tbl}, \code{data.frame}) with 345790 rows and 3 columns.
+An object of class \code{tbl_df} (inherits from \code{tbl}, \code{data.frame}) with 3166264 rows and 3 columns.
 }
 \source{
 \url{https://fred.publichealth.pitt.edu/syn_pops}
