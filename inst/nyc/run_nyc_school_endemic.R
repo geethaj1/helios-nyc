@@ -41,7 +41,7 @@ initial_exposed <- if (smoke_test) 20 else 100
 burn_in_days <- if (smoke_test) 60 else 3 * 365
 analysis_days <- if (smoke_test) 60 else 5 * 365
 n_reps <- if (smoke_test) 1 else 3
-coverages <- c(0.6, 1.0)
+coverages <- c(0.4, 0.6, 0.8, 1.0)
 coverage_types <- c("random", "targeted_riskiness")
 school_ach_scenario <- "batterman"
 n_cores <- min(parallel::detectCores() - 1, 4)
