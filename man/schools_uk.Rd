@@ -20,6 +20,7 @@ A data frame with 24,442 rows and 268 columns.
 Other data: 
 \code{\link{baseline_household_demographics_uk}},
 \code{\link{baseline_household_demographics_usa}},
+\code{\link{schools_nyc}},
 \code{\link{schools_usa}}
 }
 \concept{data}

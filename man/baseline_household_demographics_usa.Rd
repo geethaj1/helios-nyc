@@ -3,23 +3,30 @@
 \docType{data}
 \name{baseline_household_demographics_usa}
 \alias{baseline_household_demographics_usa}
-\title{Data from RTI Synthetic population of USA containing information on household size and
-age distribution. Selected for the county of San Francisco.}
+\title{Household age composition for New York City from the RTI synthetic population}
 \format{
 An object of class \code{tbl_df} (inherits from \code{tbl}, \code{data.frame}) with 3166264 rows and 3 columns.
 }
 \source{
-\url{https://fred.publichealth.pitt.edu/syn_pops}
+\url{https://github.com/RTIInternational/rti_synth_pop}
 }
 \usage{
 baseline_household_demographics_usa
 }
 \description{
-A data frame with 777,864 rows and 3 columns.
+One row per household in the five boroughs of New York City, giving the number
+of children (aged 18 and under), adults (19 to 69) and elderly people (70 and
+over). Generated with the RTI synthetic population pipeline from the 2015-2019
+American Community Survey, using stochastic rounding of household counts (see
+\code{data-raw/DATASET.R}).
+}
+\details{
+A data frame with 3,166,264 rows and 3 columns.
 }
 \seealso{
 Other data: 
 \code{\link{baseline_household_demographics_uk}},
+\code{\link{schools_nyc}},
 \code{\link{schools_uk}},
 \code{\link{schools_usa}}
 }
