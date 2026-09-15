@@ -50,3 +50,50 @@ apply_nyc_parameters <- function(parameters_list, school_ach_scenario = "batterm
   parameters_list$school_student_staff_ratio <- nyc_school_student_staff_ratio
   parameters_list
 }
+
+# Air cleaning intervention scenarios for schools, with effects in equivalent air
+# changes per hour (eACH).
+#
+# Typical NYC classroom: about 650 sq ft with 10 ft ceilings (about 184 m3) and
+# about 25 occupants (NYC average class size of 23.5-25.8 in 2023-26, plus a
+# teacher), giving about 7.4 m3 of air per occupant.
+cfm_to_m3_per_hour <- 1.699011
+nyc_classroom_volume_m3 <- 650 * 10 * 0.0283168
+nyc_classroom_occupants <- 25
+
+# ASHRAE Standard 241 (2023) requires 40 cfm of equivalent clean airflow per person
+# in classrooms, counting outdoor air ventilation, filtration and air cleaning
+# together. For a typical NYC classroom this is about 9.2 eACH in total.
+ashrae_241_classroom_cfm_per_person <- 40
+ashrae_241_target_ach <- ashrae_241_classroom_cfm_per_person * cfm_to_m3_per_hour *
+  nyc_classroom_occupants / nyc_classroom_volume_m3
+
+# NYC's current classroom purifiers: two Intellipure Compact units per classroom
+# with a clean air delivery rate of about 129-145 cfm each (independent and
+# manufacturer testing), about 2.5 eACH at full fan speed in a typical classroom.
+nyc_current_purifier_cfm_per_classroom <- 2 * 137
+nyc_current_purifier_ach <- nyc_current_purifier_cfm_per_classroom * cfm_to_m3_per_hour /
+  nyc_classroom_volume_m3
+
+nyc_school_intervention_scenarios <- list(
+  # Covered schools are brought up to the ASHRAE 241 target: each receives the
+  # additional clean air its baseline ventilation lacks, and schools already at or
+  # above the target receive none.
+  ashrae_241 = function(coverage) {
+    make_intervention(
+      name = "ashrae_241",
+      delta_depends_on_baseline_ach = TRUE,
+      delta_function = function(ach, target) max(target - ach, 0),
+      delta_params = list(target = ashrae_241_target_ach),
+      coverage = coverage
+    )
+  },
+  nyc_current_purifiers = function(coverage) {
+    make_intervention(
+      name = "nyc_current_purifiers",
+      delta_function = function(delta) delta,
+      delta_params = list(delta = nyc_current_purifier_ach),
+      coverage = coverage
+    )
+  }
+)

@@ -1,0 +1,539 @@
+---
+title: "NYC helios setup: population, schools and ventilation"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+params:
+  model_population: 100000
+  results_dir: "results"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 4.5,
+  dpi = 150
+)
+
+library(helios)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+nyc_parameters_file <- file.path("inst", "nyc", "nyc_parameters.R")
+if (!file.exists(nyc_parameters_file)) {
+  nyc_parameters_file <- system.file("nyc", "nyc_parameters.R", package = "helios", mustWork = TRUE)
+}
+source(nyc_parameters_file)
+
+# Chart palette: first three validated categorical slots and neutral ink/chrome
+# from the reference data-visualisation palette (light mode).
+ink <- list(
+  primary = "#0b0b0b",
+  secondary = "#52514e",
+  muted = "#898781",
+  grid = "#e1e0d9",
+  axis = "#c3c2b7",
+  surface = "#fcfcfb"
+)
+series <- c("#2a78d6", "#eb6834", "#1baf7a")
+
+theme_nyc <- function() {
+  theme_minimal(base_size = 11) +
+    theme(
+      plot.background = element_rect(fill = ink$surface, colour = NA),
+      panel.background = element_rect(fill = ink$surface, colour = NA),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_line(colour = ink$grid, linewidth = 0.3),
+      axis.line.x = element_line(colour = ink$axis, linewidth = 0.3),
+      axis.text = element_text(colour = ink$muted),
+      axis.title = element_text(colour = ink$secondary),
+      plot.title = element_text(colour = ink$primary, face = "bold"),
+      plot.subtitle = element_text(colour = ink$secondary),
+      plot.caption = element_text(colour = ink$muted, hjust = 0),
+      plot.title.position = "plot",
+      plot.caption.position = "plot",
+      legend.position = "top",
+      legend.justification = "left",
+      legend.title = element_blank(),
+      legend.text = element_text(colour = ink$secondary),
+      strip.text = element_text(colour = ink$primary, hjust = 0, face = "bold")
+    )
+}
+
+show_table <- function(df, ...) knitr::kable(df, format.args = list(big.mark = ","), ...)
+
+nyc_county_names <- c(
+  "36005" = "Bronx",
+  "36047" = "Brooklyn",
+  "36061" = "Manhattan",
+  "36081" = "Queens",
+  "36085" = "Staten Island"
+)
+```
+
+This report summarises the New York City inputs used in helios-nyc: the synthetic
+household population, public school sizes, the population helios generates from
+them, and the school ventilation assumptions. Charts are static; each has a table
+with the underlying values.
+
+# Key numbers
+
+```{r key-numbers}
+households <- baseline_household_demographics_usa
+household_size <- rowSums(households)
+people_by_age <- colSums(households)
+
+key_numbers <- data.frame(
+  Measure = c(
+    "Households (five boroughs)",
+    "People in households",
+    "Mean household size",
+    "Public schools (2018-19, open with enrollment)",
+    "Students enrolled",
+    "Students per full-time-equivalent teacher"
+  ),
+  Value = c(
+    comma(nrow(households)),
+    comma(sum(household_size)),
+    number(mean(household_size), accuracy = 0.01),
+    comma(nrow(schools_nyc)),
+    comma(sum(schools_nyc$enrollment)),
+    number(nyc_school_student_staff_ratio, accuracy = 0.1)
+  )
+)
+show_table(key_numbers)
+```
+
+Sources: households from the RTI synthetic population pipeline (2015-2019 American
+Community Survey, New York State filtered to the five boroughs, with stochastic
+rounding of household counts); schools from the NCES Common Core of Data school
+directory for 2018-19.
+
+# Households and age structure
+
+## People by age group
+
+```{r age-groups}
+age_df <- data.frame(
+  age_group = factor(
+    c("Children (0-18)", "Adults (19-69)", "Elderly (70+)"),
+    levels = c("Children (0-18)", "Adults (19-69)", "Elderly (70+)")
+  ),
+  people = as.numeric(people_by_age[c("child", "adult", "elderly")])
+)
+age_df$share <- age_df$people / sum(age_df$people)
+
+ggplot(age_df, aes(age_group, people)) +
+  geom_col(fill = series[1], width = 0.5) +
+  geom_text(
+    aes(label = paste0(comma(people), " (", percent(share, accuracy = 0.1), ")")),
+    vjust = -0.6,
+    colour = ink$secondary,
+    size = 3.5
+  ) +
+  scale_y_continuous(labels = label_comma(), expand = expansion(mult = c(0, 0.12))) +
+  labs(
+    title = "People by age group",
+    subtitle = "NYC synthetic household population",
+    x = NULL,
+    y = "People"
+  ) +
+  theme_nyc()
+
+show_table(
+  transmute(age_df, `Age group` = age_group, People = people, Share = percent(share, accuracy = 0.1))
+)
+```
+
+## Household size: model population versus the Census
+
+```{r household-size}
+acs_household_size_share <- c(
+  "1" = 0.3229, "2" = 0.2845, "3" = 0.1622, "4" = 0.1251,
+  "5" = 0.0595, "6" = 0.0251, "7+" = 0.0207
+)
+size_levels <- names(acs_household_size_share)
+model_size_share <- prop.table(table(factor(
+  ifelse(household_size >= 7, "7+", as.character(household_size)),
+  levels = size_levels
+)))
+
+household_size_df <- rbind(
+  data.frame(size = size_levels, source = "RTI synthetic population", share = as.numeric(model_size_share)),
+  data.frame(size = size_levels, source = "ACS 2015-2019 (table B11016)", share = as.numeric(acs_household_size_share))
+)
+household_size_df$size <- factor(household_size_df$size, levels = size_levels)
+household_size_df$source <- factor(
+  household_size_df$source,
+  levels = c("RTI synthetic population", "ACS 2015-2019 (table B11016)")
+)
+
+ggplot(household_size_df, aes(size, share, fill = source)) +
+  geom_col(position = position_dodge2(width = 0.7, padding = 0.1), width = 0.7) +
+  scale_fill_manual(values = series[1:2]) +
+  scale_y_continuous(labels = label_percent(accuracy = 1), expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Share of households by size",
+    subtitle = "Large households are slightly under-represented in the synthetic population",
+    x = "People in household",
+    y = "Share of households"
+  ) +
+  theme_nyc()
+
+household_size_table <- tidyr::pivot_wider(household_size_df, names_from = source, values_from = share)
+household_size_table[-1] <- lapply(household_size_table[-1], percent, accuracy = 0.01)
+show_table(rename(household_size_table, `People in household` = size))
+```
+
+# Schools
+
+## Students per school
+
+```{r school-sizes}
+schools_above_limit <- sum(schools_nyc$enrollment > 3000)
+
+ggplot(filter(schools_nyc, enrollment <= 3000), aes(enrollment)) +
+  geom_histogram(binwidth = 100, boundary = 0, fill = series[1], colour = ink$surface, linewidth = 0.6) +
+  scale_x_continuous(labels = label_comma(), breaks = seq(0, 3000, 500)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Students per school",
+    subtitle = sprintf(
+      "%s NYC public schools, 2018-19 (bins of 100 students; %d schools above 3,000 not shown)",
+      comma(nrow(schools_nyc)),
+      schools_above_limit
+    ),
+    x = "Students enrolled",
+    y = "Schools"
+  ) +
+  theme_nyc()
+
+show_table(data.frame(
+  Statistic = c("Minimum", "25th percentile", "Median", "Mean", "75th percentile", "95th percentile", "Maximum"),
+  `Students enrolled` = round(c(
+    min(schools_nyc$enrollment),
+    quantile(schools_nyc$enrollment, 0.25),
+    median(schools_nyc$enrollment),
+    mean(schools_nyc$enrollment),
+    quantile(schools_nyc$enrollment, 0.75),
+    quantile(schools_nyc$enrollment, 0.95),
+    max(schools_nyc$enrollment)
+  )),
+  check.names = FALSE
+))
+```
+
+## Students by borough
+
+```{r schools-by-borough}
+borough_df <- schools_nyc |>
+  mutate(borough = nyc_county_names[county_code]) |>
+  group_by(borough) |>
+  summarise(schools = n(), students = sum(enrollment), .groups = "drop") |>
+  arrange(desc(students)) |>
+  mutate(borough = factor(borough, levels = borough))
+
+ggplot(borough_df, aes(borough, students)) +
+  geom_col(fill = series[1], width = 0.5) +
+  geom_text(aes(label = comma(students)), vjust = -0.6, colour = ink$secondary, size = 3.5) +
+  scale_y_continuous(labels = label_comma(), expand = expansion(mult = c(0, 0.12))) +
+  labs(
+    title = "Students enrolled by borough",
+    subtitle = "NYC public schools, 2018-19",
+    x = NULL,
+    y = "Students"
+  ) +
+  theme_nyc()
+
+show_table(rename(borough_df, Borough = borough, Schools = schools, Students = students))
+```
+
+# Model population
+
+The charts below use a single population generated by helios with the NYC settings
+(`r comma(params$model_population)` people). Households and schools are sampled from
+the data above. Workplace sizes come from helios's parametric US distribution (an
+offset truncated power law), not NYC data. Leisure location sizes come from a
+negative binomial distribution.
+
+```{r model-population}
+model_n <- params$model_population
+model_parameters <- get_parameters(
+  overrides = list(
+    human_population = model_n,
+    number_initial_S = model_n - 10,
+    number_initial_E = 10,
+    seed = 1
+  ),
+  archetype = "flu"
+)
+model_parameters <- apply_nyc_parameters(model_parameters)
+model <- create_variables(model_parameters)
+
+location_sizes <- function(variable) {
+  categories <- setdiff(variable$get_categories(), "0")
+  vapply(categories, function(x) variable$get_size_of(values = x), numeric(1))
+}
+model_school_sizes <- location_sizes(model$variables_list$school)
+model_workplace_sizes <- location_sizes(model$variables_list$workplace)
+model_age <- vapply(
+  c("child", "adult", "elderly"),
+  function(x) model$variables_list$age_class$get_size_of(values = x),
+  numeric(1)
+)
+
+show_table(data.frame(
+  Measure = c(
+    "People",
+    "Children / adults / elderly",
+    "Households",
+    "Schools",
+    "People assigned to a school (students and staff)",
+    "Workplaces",
+    "People assigned to a workplace"
+  ),
+  Value = c(
+    comma(model_n),
+    paste(comma(model_age), collapse = " / "),
+    comma(length(model$variables_list$household$get_categories())),
+    comma(length(model_school_sizes)),
+    comma(sum(model_school_sizes)),
+    comma(length(model_workplace_sizes)),
+    comma(sum(model_workplace_sizes))
+  )
+))
+```
+
+## Workplace sizes
+
+```{r workplace-sizes}
+ggplot(data.frame(size = model_workplace_sizes), aes(size)) +
+  geom_histogram(bins = 30, fill = series[1], colour = ink$surface, linewidth = 0.6) +
+  scale_x_log10(labels = label_comma()) +
+  scale_y_continuous(labels = label_comma(), expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "People per workplace in the model population",
+    subtitle = "Log scale; parametric US distribution",
+    x = "People in workplace (log scale)",
+    y = "Workplaces"
+  ) +
+  theme_nyc()
+
+show_table(data.frame(
+  Statistic = c("Workplaces", "Median size", "Mean size", "95th percentile", "Largest"),
+  Value = round(c(
+    length(model_workplace_sizes),
+    median(model_workplace_sizes),
+    mean(model_workplace_sizes),
+    quantile(model_workplace_sizes, 0.95),
+    max(model_workplace_sizes)
+  ))
+))
+```
+
+## School sizes: model population versus NYC data
+
+In the model, school size includes staff. Large schools are drawn rarely in a
+population of this size, so the model's upper tail is shorter than the data's.
+
+```{r school-size-comparison}
+quantile_levels <- c(0.05, 0.25, 0.5, 0.75, 0.95)
+show_table(data.frame(
+  Quantile = percent(quantile_levels),
+  `NYC schools (students)` = round(quantile(schools_nyc$enrollment, quantile_levels)),
+  `Model schools (students and staff)` = round(quantile(model_school_sizes, quantile_levels)),
+  check.names = FALSE
+), row.names = FALSE)
+```
+
+# School ventilation
+
+Each school's baseline air changes per hour (ACH) is drawn from a normal distribution
+truncated at 0. The main analysis uses inputs chosen to reproduce the school-day
+classroom ACH of 2.0 +/- 1.3 measured by Batterman et al. (2017, Indoor Air,
+doi:10.1111/ina.12384). The sensitivity scenario enters 2.0 and 1.3 directly.
+
+```{r ventilation}
+set.seed(1)
+ach_draws <- do.call(rbind, lapply(names(nyc_school_ach_scenarios), function(scenario) {
+  s <- nyc_school_ach_scenarios[[scenario]]
+  data.frame(
+    scenario = scenario,
+    ach = truncnorm::rtruncnorm(100000, a = 0, b = Inf, mean = s$mean, sd = s$sd)
+  )
+}))
+ach_summary <- ach_draws |>
+  group_by(scenario) |>
+  summarise(
+    realised_mean = mean(ach),
+    realised_sd = sd(ach),
+    below_half = mean(ach < 0.5),
+    p95 = quantile(ach, 0.95),
+    .groups = "drop"
+  )
+scenario_labels <- setNames(
+  sprintf(
+    "%s (inputs %.2f / %.2f): realised mean %.2f, SD %.2f",
+    c(batterman = "Main analysis", batterman_untruncated = "Sensitivity")[ach_summary$scenario],
+    vapply(ach_summary$scenario, function(x) nyc_school_ach_scenarios[[x]]$mean, numeric(1)),
+    vapply(ach_summary$scenario, function(x) nyc_school_ach_scenarios[[x]]$sd, numeric(1)),
+    ach_summary$realised_mean,
+    ach_summary$realised_sd
+  ),
+  ach_summary$scenario
+)
+
+ggplot(ach_draws, aes(ach)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    binwidth = 0.25,
+    boundary = 0,
+    fill = series[1],
+    colour = ink$surface,
+    linewidth = 0.6
+  ) +
+  facet_wrap(~scenario, ncol = 1, labeller = labeller(scenario = scenario_labels)) +
+  coord_cartesian(xlim = c(0, 8)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Baseline school ACH distribution",
+    x = "Air changes per hour",
+    y = "Density"
+  ) +
+  theme_nyc()
+
+show_table(transmute(
+  ach_summary,
+  Scenario = c(batterman = "Main analysis", batterman_untruncated = "Sensitivity")[scenario],
+  `Realised mean` = round(realised_mean, 2),
+  `Realised SD` = round(realised_sd, 2),
+  `Schools below 0.5 ACH` = percent(below_half, accuracy = 0.1),
+  `95th percentile` = round(p95, 2)
+))
+```
+
+# Prototype simulation results
+
+```{r results-files}
+epidemic_file <- file.path(params$results_dir, "nyc_school_epidemic", "nyc_school_epidemic.rds")
+endemic_file <- file.path(params$results_dir, "nyc_school_endemic", "endemic_summary.rds")
+intervention_labels <- c(
+  ashrae_241 = "Schools brought up to ASHRAE 241",
+  nyc_current_purifiers = "NYC's current classroom purifiers"
+)
+```
+
+Interventions: covered schools brought up to the ASHRAE Standard 241 classroom target
+(40 cfm of clean air per person, about `r round(ashrae_241_target_ach, 1)` equivalent
+air changes per hour in a typical NYC classroom), and, where run, NYC's current
+classroom purifiers (about +`r round(nyc_current_purifier_ach, 1)` equivalent air
+changes per hour). Transmission rates are the helios flu values, which give R0 about
+1.5 in NYC but have not been formally recalibrated.
+
+## Epidemic (single flu season)
+
+```{r epidemic-results, eval = file.exists(epidemic_file), fig.height = 5}
+epidemic <- readRDS(epidemic_file)
+epidemic_summary <- epidemic$totals |>
+  filter(intervention != "none") |>
+  group_by(intervention, coverage, coverage_type) |>
+  summarise(
+    mean_averted = mean(infections_averted_pct),
+    se_averted = sd(infections_averted_pct) / sqrt(n()),
+    replicates = n(),
+    .groups = "drop"
+  ) |>
+  mutate(
+    placement = factor(
+      c(random = "Random placement", targeted_riskiness = "Targeted to lowest-ACH schools")[coverage_type],
+      levels = c("Random placement", "Targeted to lowest-ACH schools")
+    ),
+    coverage_label = factor(percent(coverage), levels = percent(sort(unique(coverage))))
+  )
+epidemic_summary$intervention_label <- factor(
+  intervention_labels[epidemic_summary$intervention],
+  levels = intervention_labels[intervention_labels %in% intervention_labels[epidemic_summary$intervention]]
+)
+baseline_attack <- mean(epidemic$totals$attack_rate[epidemic$totals$intervention == "none"])
+
+ggplot(epidemic_summary, aes(coverage_label, mean_averted, fill = placement)) +
+  facet_wrap(~intervention_label, ncol = 1) +
+  geom_col(position = position_dodge2(width = 0.7, padding = 0.1), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_averted - se_averted, ymax = mean_averted + se_averted),
+    position = position_dodge(width = 0.7),
+    width = 0.15,
+    colour = ink$secondary,
+    linewidth = 0.4
+  ) +
+  scale_fill_manual(values = series[1:2]) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Infections averted by air cleaners in schools",
+    subtitle = sprintf(
+      "Epidemic, %s people; baseline attack rate %s; bars show mean, whiskers +/- 1 standard error",
+      comma(epidemic$settings$population),
+      percent(baseline_attack, accuracy = 0.1)
+    ),
+    x = "Share of schools covered",
+    y = "Infections averted"
+  ) +
+  theme_nyc()
+
+show_table(transmute(
+  epidemic_summary,
+  Intervention = intervention_label,
+  Coverage = coverage_label,
+  Placement = placement,
+  `Infections averted (%)` = round(mean_averted, 1),
+  `Standard error` = round(se_averted, 1),
+  Replicates = replicates
+))
+```
+
+```{r epidemic-missing, eval = !file.exists(epidemic_file), results = "asis"}
+cat("Epidemic results not found at `", epidemic_file, "`.\n", sep = "")
+```
+
+## Endemic (five years after burn-in)
+
+```{r endemic-results, eval = file.exists(endemic_file)}
+endemic <- readRDS(endemic_file)
+settings <- endemic$settings
+endemic_summary <- endemic$totals |>
+  group_by(arm_id, coverage, coverage_type) |>
+  summarise(
+    annual_infections_per_100k = mean(annual_infections_per_100k),
+    mean_averted = mean(infections_averted_pct),
+    se_averted = sd(infections_averted_pct) / sqrt(n()),
+    replicates = n(),
+    .groups = "drop"
+  ) |>
+  arrange(coverage_type, coverage)
+
+cat(sprintf(
+  "Settings: population %s; burn-in %d days; analysis %d days; immunity %d days; about %.1f imported infections per day; %d replicates.\n",
+  comma(settings$population), settings$burn_in_days, settings$analysis_days,
+  settings$duration_immune_days, settings$imported_infections_per_day, settings$n_reps
+))
+
+show_table(transmute(
+  endemic_summary,
+  Arm = arm_id,
+  `Annual infections per 100,000` = round(annual_infections_per_100k),
+  `Infections averted (%)` = round(mean_averted, 1),
+  `Standard error` = round(se_averted, 1),
+  Replicates = replicates
+))
+```
+
+```{r endemic-missing, eval = !file.exists(endemic_file), results = "asis"}
+cat("Endemic results not found at `", endemic_file, "`.\n", sep = "")
+```

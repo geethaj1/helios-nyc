@@ -99,7 +99,10 @@ generate_joint_intervention_switches <- function(parameters_list, variables_list
     indices <- c()
     location_indices <- 1:total_length
     while (sum < total_with_intervention) {
-      i <- sample(location_indices, 1)
+      # Index into location_indices rather than calling sample() on it directly:
+      # when one index remains, sample(n, 1) would draw from 1:n instead of
+      # returning n, which can re-select an already covered location.
+      i <- location_indices[sample.int(length(location_indices), 1)]
       sum <- sum + setting_size_flat[i]
       indices <- c(indices, i)
       location_indices <- setdiff(location_indices, i)
@@ -218,7 +221,10 @@ generate_setting_intervention_switches <- function(
     location_indices <- 1:length(setting_size)
 
     while (sum < total_with_intervention) {
-      i <- sample(location_indices, 1)
+      # Index into location_indices rather than calling sample() on it directly:
+      # when one index remains, sample(n, 1) would draw from 1:n instead of
+      # returning n, which can re-select an already covered location.
+      i <- location_indices[sample.int(length(location_indices), 1)]
       sum <- sum + setting_size[i]
       indices <- c(indices, i)
       location_indices <- setdiff(location_indices, i)

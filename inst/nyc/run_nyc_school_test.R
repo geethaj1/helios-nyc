@@ -1,48 +1,39 @@
-# Prototype NYC school intervention runs: epidemic flu, portable air cleaners in
-# schools only, at several coverage levels with random and risk-targeted
-# placement, compared against a no-intervention baseline.
+# NYC school air cleaning runs: epidemic flu, interventions in schools only, at
+# several coverage levels with random and risk-targeted placement, compared against
+# a no-intervention baseline.
 #
-# Prerequisites:
-#   1. data/schools_nyc.rda built by data-raw/DATASET.R
-#   2. helios-nyc installed, e.g. devtools::install("~/helios-nyc")
+# Interventions are defined in inst/nyc/nyc_parameters.R:
+#   - ashrae_241: covered schools brought up to the ASHRAE Standard 241 classroom
+#     target (about 9.2 eACH in total for a typical NYC classroom)
+#   - nyc_current_purifiers: NYC's current classroom purifiers (about +2.5 eACH)
 #
-# PROVISIONAL INPUTS (replace before reporting results):
-#   - Transmission rates are the helios flu archetype values, which have not yet
-#     been recalibrated to R0 ~1.5 for the NYC population.
-#   - The air cleaner effect is a placeholder distribution (see air_cleaner below).
+# Run from the helios-nyc repository root. Prerequisite: helios-nyc installed,
+# e.g. devtools::install("~/helios-nyc").
+#
+# PROVISIONAL INPUT: transmission rates are the helios flu archetype values, which
+# give R0 about 1.5 in the NYC prototype but have not been formally recalibrated.
 
 library(helios)
 
-source(system.file("nyc", "nyc_parameters.R", package = "helios", mustWork = TRUE))
+nyc_parameters_file <- file.path("inst", "nyc", "nyc_parameters.R")
+if (!file.exists(nyc_parameters_file)) {
+  nyc_parameters_file <- system.file("nyc", "nyc_parameters.R", package = "helios", mustWork = TRUE)
+}
+source(nyc_parameters_file)
 
 # Set to TRUE for a quick end-to-end check with a small population.
 smoke_test <- FALSE
 
+intervention_names <- c("ashrae_241")
 population <- if (smoke_test) 10000 else 100000
 initial_exposed <- if (smoke_test) 20 else 100
-simulation_days <- if (smoke_test) 30 else 250
+simulation_days <- if (smoke_test) 30 else 200
 n_reps <- if (smoke_test) 1 else 3
 coverages <- c(0.4, 0.6, 0.8, 1.0)
 coverage_types <- c("random", "targeted_riskiness")
 school_ach_scenario <- "batterman"
-n_cores <- min(parallel::detectCores() - 1, 8)
-output_dir <- file.path("results", "nyc_school_test")
-
-# Placeholder portable air cleaner effect: mean +3.5 eACH per covered school,
-# between NYC's deployed purifiers (~2.5 eACH: two Intellipure units, CADR
-# 129-145 cfm each, in a ~184 m3 classroom) and purifiers sized to the CDC
-# 5 eACH target. A lognormal multiplier with sdlog = 0.4 (mean 1) varies the
-# effect between schools, giving roughly 1.6-7.6 eACH across the central 95%.
-make_air_cleaner <- function(coverage) {
-  make_intervention(
-    name = "portable_air_cleaner",
-    delta_function = function(delta) delta,
-    delta_params = list(delta = 3.5),
-    variation = TRUE,
-    variation_params = list(sdlog = 0.4),
-    coverage = coverage
-  )
-}
+n_cores <- min(parallel::detectCores() - 1, 4)
+output_dir <- file.path("results", if (smoke_test) "nyc_school_epidemic_smoke" else "nyc_school_epidemic")
 
 base_parameters <- function(seed) {
   parameters_list <- get_parameters(
@@ -63,9 +54,9 @@ base_parameters <- function(seed) {
 # within a replicate shares the same population and random stream up to the
 # point where the intervention allocation begins.
 arms <- rbind(
-  data.frame(arm = "baseline", coverage = 0, coverage_type = "none"),
+  data.frame(intervention = "none", coverage = 0, coverage_type = "none"),
   expand.grid(
-    arm = "air_cleaner",
+    intervention = intervention_names,
     coverage = coverages,
     coverage_type = coverage_types,
     stringsAsFactors = FALSE
@@ -77,19 +68,19 @@ runs$seed <- 1000 + runs$rep
 run_one <- function(i) {
   run <- runs[i, ]
   parameters_list <- base_parameters(run$seed)
-  if (run$arm == "air_cleaner") {
+  if (run$intervention != "none") {
     parameters_list <- set_intervention_ach(
       parameters_list = parameters_list,
       setting = "school",
       coverage_target = "square_footage",
       coverage_type = run$coverage_type,
       timestep = 1,
-      intervention = make_air_cleaner(run$coverage)
+      intervention = nyc_school_intervention_scenarios[[run$intervention]](run$coverage)
     )
   }
   started <- Sys.time()
   result <- run_simulation(parameters_list)$result
-  result$arm <- run$arm
+  result$intervention <- run$intervention
   result$coverage <- run$coverage
   result$coverage_type <- run$coverage_type
   result$rep <- run$rep
@@ -99,8 +90,13 @@ run_one <- function(i) {
 }
 
 message(sprintf(
-  "Running %d simulations (%d arms x %d replicates) on %d cores: population %s, %d days",
-  nrow(runs), nrow(arms), n_reps, n_cores, format(population, big.mark = ","), simulation_days
+  "Running %d simulations (%d arms x %d replicates) on %d cores: population %s, %d days, interventions: %s",
+  nrow(runs), nrow(arms), n_reps, n_cores, format(population, big.mark = ","), simulation_days,
+  paste(intervention_names, collapse = ", ")
+))
+message(sprintf(
+  "ASHRAE 241 classroom target: %.1f eACH; NYC current purifiers: +%.1f eACH",
+  ashrae_241_target_ach, nyc_current_purifier_ach
 ))
 started <- Sys.time()
 outputs <- parallel::mclapply(seq_len(nrow(runs)), run_one, mc.cores = n_cores, mc.preschedule = FALSE)
@@ -113,34 +109,49 @@ message(sprintf("Finished in %.1f minutes", as.numeric(difftime(Sys.time(), star
 
 # Per-run totals. E_new counts new infections per timestep; seeded exposures are
 # added so the total covers everyone infected during the epidemic.
-totals <- do.call(rbind, lapply(split(results, list(results$arm, results$coverage, results$coverage_type, results$rep), drop = TRUE), function(d) {
+totals <- do.call(rbind, lapply(split(results, list(results$intervention, results$coverage, results$coverage_type, results$rep), drop = TRUE), function(d) {
   data.frame(
-    arm = d$arm[1],
+    intervention = d$intervention[1],
     coverage = d$coverage[1],
     coverage_type = d$coverage_type[1],
     rep = d$rep[1],
     infections = sum(d$E_new, na.rm = TRUE) + initial_exposed,
     hospitalisations = sum(d$H_new, na.rm = TRUE),
     deaths = max(d$D_count, na.rm = TRUE),
-    peak_infectious = max(d$I_mild_count + d$I_hosp_count, na.rm = TRUE),
     still_infectious_at_end = tail(d$I_mild_count + d$I_hosp_count, 1)
   )
 }))
 
-baseline <- totals[totals$arm == "baseline", c("rep", "infections")]
+baseline <- totals[totals$intervention == "none", c("rep", "infections")]
 names(baseline)[2] <- "baseline_infections"
 totals <- merge(totals, baseline, by = "rep")
 totals$attack_rate <- totals$infections / population
 totals$infections_averted_pct <- 100 * (1 - totals$infections / totals$baseline_infections)
 
 summary_table <- aggregate(
-  cbind(attack_rate, infections_averted_pct, hospitalisations, deaths, still_infectious_at_end) ~ arm + coverage + coverage_type,
+  cbind(attack_rate, infections_averted_pct, hospitalisations, deaths, still_infectious_at_end) ~ intervention + coverage + coverage_type,
   data = totals,
   FUN = mean
 )
-summary_table <- summary_table[order(summary_table$coverage_type, summary_table$coverage), ]
+summary_table <- summary_table[order(summary_table$intervention, summary_table$coverage_type, summary_table$coverage), ]
 print(summary_table, row.names = FALSE, digits = 3)
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(list(runs = runs, results = results, totals = totals, summary = summary_table), file.path(output_dir, "nyc_school_test.rds"))
-message("Saved to ", file.path(output_dir, "nyc_school_test.rds"))
+saveRDS(
+  list(
+    settings = list(
+      population = population,
+      simulation_days = simulation_days,
+      n_reps = n_reps,
+      school_ach_scenario = school_ach_scenario,
+      ashrae_241_target_ach = ashrae_241_target_ach,
+      nyc_current_purifier_ach = nyc_current_purifier_ach
+    ),
+    runs = runs,
+    results = results,
+    totals = totals,
+    summary = summary_table
+  ),
+  file.path(output_dir, "nyc_school_epidemic.rds")
+)
+message("Saved to ", file.path(output_dir, "nyc_school_epidemic.rds"))
