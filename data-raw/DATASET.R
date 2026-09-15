@@ -125,3 +125,43 @@ stopifnot(
   all(rowSums(baseline_household_demographics_usa) >= 1)
 )
 usethis::use_data(baseline_household_demographics_usa, overwrite = TRUE)
+
+# New York City (five boroughs) public schools for the 2018-19 school year, from
+# the NCES Common Core of Data school directory. Downloaded from the Urban
+# Institute Education Data Portal API
+# (https://educationdata.urban.org/api/v1/schools/ccd/directory/2018/?fips=36)
+# and restricted to county codes 36005, 36047, 36061, 36081 and 36085.
+# 2018-19 matches the period of the NYC household data (2015-2019 ACS).
+# A HIFLD redistribution labelled 2017-18 was rejected because it mixed school
+# years and contained duplicate schools.
+# Open (status 1) and new (status 3) schools with reported enrollment are kept;
+# closed and inactive schools, and schools without an enrollment figure, are
+# excluded.
+schools_nyc <- readr::read_csv(
+  "data-raw/nyc_public_schools_ccd_2018_19.csv",
+  col_types = readr::cols(
+    ncessch = "c",
+    county_code = "c",
+    zip_location = "c"
+  )
+) |>
+  dplyr::filter(school_status %in% c(1, 3), enrollment > 0) |>
+  dplyr::select(
+    ncessch,
+    school_name,
+    county_code,
+    street_location,
+    zip_location,
+    school_type,
+    charter,
+    lowest_grade_offered,
+    highest_grade_offered,
+    enrollment,
+    teachers_fte
+  )
+
+stopifnot(
+  !anyDuplicated(schools_nyc$ncessch),
+  all(schools_nyc$county_code %in% nyc_county_fips)
+)
+usethis::use_data(schools_nyc, overwrite = TRUE)

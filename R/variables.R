@@ -20,7 +20,7 @@ create_variables <- function(parameters_list) {
   # If user wants to use empirical distribution of households and ages from ONS (UK) or RTI synth pop (USA)
   if (parameters_list$household_distribution_country %in% c("UK", "USA")) {
     # Bootstrap sampling of households from either ONS 2011 Census reference panel of household sizes and age composition
-    # or RTI synthetic population of household sizes and age composition for San Francisco
+    # or RTI synthetic population of household sizes and age composition for New York City
     household_age_list <- generate_initial_households_bootstrap(
       parameters_list = parameters_list
     )
@@ -503,7 +503,8 @@ generate_initial_schools <- function(parameters_list, age_class_variable) {
 #'
 #' Alternative to `generate_initial_schools`. Rather than using a parametric
 #' distribution, this function uses sampling with replacement from a reference
-#' dataset. This is known as bootstrapping. The dataset used is [`schools_uk`].
+#' dataset. This is known as bootstrapping. The dataset used is [`schools_uk`]
+#' or, for `school_distribution_country = "USA"`, [`schools_nyc`].
 #'
 #' @inheritParams generate_initial_schools
 #'
@@ -538,11 +539,9 @@ generate_initial_schools_bootstrap <- function(
     empirical_school_sizes <- schools_uk$`headcount of pupils`
     empirical_school_sizes <- empirical_school_sizes[empirical_school_sizes > 0]
   } else if (parameters_list$school_distribution_country == "USA") {
-    schools_usa_total <- dplyr::filter(schools_usa, type == "total")
-    empirical_school_sizes <- rep(
-      schools_usa_total$size_midpoint,
-      schools_usa_total$count
-    )
+    # helios-nyc: individual New York City public school enrollments (2018-19)
+    # rather than national school size bands.
+    empirical_school_sizes <- schools_nyc$enrollment
   } else {
     stop(
       "school_distribution_country must be set to either UK or USA - other countries not implemented yet"
@@ -897,7 +896,7 @@ generate_initial_households_bootstrap <- function(parameters_list) {
     stop("Country specified must be either USA or UK")
   }
 
-  ## Using data from RTI's synthetic population for San Francisco to bootstrap https://fred.publichealth.pitt.edu/syn_pops
+  ## Using data from RTI's synthetic population for New York City to bootstrap https://github.com/RTIInternational/rti_synth_pop
   if (country == "USA") {
     ref_panel <- baseline_household_demographics_usa
   } else if (country == "UK") {
