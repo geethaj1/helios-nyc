@@ -44,8 +44,31 @@ n_reps <- if (smoke_test) 1 else 3
 coverages <- c(0.4, 0.6, 0.8, 1.0)
 coverage_types <- c("random", "targeted_riskiness")
 school_ach_scenario <- "batterman"
-n_cores <- min(parallel::detectCores() - 1, 4)
 output_dir <- file.path("results", if (smoke_test) "nyc_school_endemic_smoke" else "nyc_school_endemic")
+
+# Use every physical core but one, leaving the remaining core for the operating
+# system. Logical (hyperthreaded) cores are not counted: simulations are compute
+# bound, so running one worker per logical core oversubscribes the machine and
+# slows the batch down. Set HELIOS_NYC_CORES to override.
+detect_cores <- function() {
+  override <- Sys.getenv("HELIOS_NYC_CORES", "")
+  if (nzchar(override)) {
+    override <- suppressWarnings(as.integer(override))
+    if (!is.na(override) && override >= 1L) {
+      return(override)
+    }
+    warning("HELIOS_NYC_CORES is not a positive integer; ignoring it.")
+  }
+  n <- parallel::detectCores(logical = FALSE)
+  if (is.na(n) || n < 1L) {
+    n <- parallel::detectCores(logical = TRUE)
+  }
+  if (is.na(n) || n < 1L) {
+    n <- 1L
+  }
+  max(1L, n - 1L)
+}
+n_cores <- detect_cores()
 
 # Immunity lasts one year on average (recovered individuals return to susceptible
 # at rate 1 / 365 per day).
@@ -95,6 +118,12 @@ arms$arm_id <- ifelse(
 runs <- merge(arms, data.frame(rep = seq_len(n_reps)))
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Parallel workers are separate R processes whose working directory is not
+# guaranteed to match this session's, so paths they use are made absolute here.
+nyc_parameters_file <- normalizePath(nyc_parameters_file, winslash = "/", mustWork = TRUE)
+output_dir <- normalizePath(output_dir, winslash = "/", mustWork = TRUE)
+
 burn_in_path <- function(rep) file.path(output_dir, sprintf("burn_in_rep%02d.rds", rep))
 arm_path <- function(arm_id, rep) file.path(output_dir, sprintf("arm_%s_rep%02d.rds", arm_id, rep))
 
@@ -159,17 +188,47 @@ check_failures <- function(outputs, label) {
   }
 }
 
+# Objects the workers need. Each worker is a fresh R process, so everything the
+# task functions reference must either be exported here or recreated by the
+# library() and source() calls below.
+worker_objects <- c(
+  "nyc_parameters_file", "population", "initial_exposed", "burn_in_days",
+  "analysis_days", "end_day", "school_ach_scenario", "intervention_name",
+  "duration_immune_days", "imported_infections_per_day", "output_dir",
+  "burn_in_timesteps", "runs", "base_parameters", "burn_in_path", "arm_path",
+  "run_burn_in", "run_arm"
+)
+
+# A PSOCK cluster is used rather than parallel::mclapply(), which relies on
+# forking and so is not available on Windows. Tasks are wrapped in try() so that
+# one failure does not abort the batch, matching check_failures() below.
+run_in_parallel <- function(x, fun_name) {
+  workers <- min(n_cores, length(x))
+  if (workers <= 1L) {
+    return(lapply(x, function(i) try(do.call(fun_name, list(i)), silent = TRUE)))
+  }
+  cl <- parallel::makeCluster(workers)
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  parallel::clusterExport(cl, worker_objects, envir = environment())
+  parallel::clusterEvalQ(cl, {
+    library(helios)
+    source(nyc_parameters_file)
+    NULL
+  })
+  parallel::parLapplyLB(cl, x, function(i) try(do.call(fun_name, list(i)), silent = TRUE))
+}
+
 message(sprintf(
   "Endemic batch: population %s, burn-in %d days, analysis %d days, %d arms x %d replicates, %d cores, intervention: %s",
   format(population, big.mark = ","), burn_in_days, analysis_days, nrow(arms), n_reps, n_cores, intervention_name
 ))
 
 started <- Sys.time()
-burn_in_outputs <- parallel::mclapply(seq_len(n_reps), run_burn_in, mc.cores = n_cores, mc.preschedule = FALSE)
+burn_in_outputs <- run_in_parallel(seq_len(n_reps), "run_burn_in")
 check_failures(burn_in_outputs, "Burn-in")
 message(sprintf("Burn-in finished after %.1f minutes", as.numeric(difftime(Sys.time(), started, units = "mins"))))
 
-arm_outputs <- parallel::mclapply(seq_len(nrow(runs)), run_arm, mc.cores = n_cores, mc.preschedule = FALSE)
+arm_outputs <- run_in_parallel(seq_len(nrow(runs)), "run_arm")
 check_failures(arm_outputs, "Arm runs")
 message(sprintf("All runs finished after %.1f minutes", as.numeric(difftime(Sys.time(), started, units = "mins"))))
 

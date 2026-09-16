@@ -32,8 +32,35 @@ n_reps <- if (smoke_test) 1 else 3
 coverages <- c(0.4, 0.6, 0.8, 1.0)
 coverage_types <- c("random", "targeted_riskiness")
 school_ach_scenario <- "batterman"
-n_cores <- min(parallel::detectCores() - 1, 4)
 output_dir <- file.path("results", if (smoke_test) "nyc_school_epidemic_smoke" else "nyc_school_epidemic")
+
+# Use every physical core but one, leaving the remaining core for the operating
+# system. Logical (hyperthreaded) cores are not counted: simulations are compute
+# bound, so running one worker per logical core oversubscribes the machine and
+# slows the batch down. Set HELIOS_NYC_CORES to override.
+detect_cores <- function() {
+  override <- Sys.getenv("HELIOS_NYC_CORES", "")
+  if (nzchar(override)) {
+    override <- suppressWarnings(as.integer(override))
+    if (!is.na(override) && override >= 1L) {
+      return(override)
+    }
+    warning("HELIOS_NYC_CORES is not a positive integer; ignoring it.")
+  }
+  n <- parallel::detectCores(logical = FALSE)
+  if (is.na(n) || n < 1L) {
+    n <- parallel::detectCores(logical = TRUE)
+  }
+  if (is.na(n) || n < 1L) {
+    n <- 1L
+  }
+  max(1L, n - 1L)
+}
+n_cores <- detect_cores()
+
+# Parallel workers are separate R processes whose working directory is not
+# guaranteed to match this session's, so paths they use are made absolute here.
+nyc_parameters_file <- normalizePath(nyc_parameters_file, winslash = "/", mustWork = TRUE)
 
 base_parameters <- function(seed) {
   parameters_list <- get_parameters(
@@ -98,8 +125,35 @@ message(sprintf(
   "ASHRAE 241 classroom target: %.1f eACH; NYC current purifiers: +%.1f eACH",
   ashrae_241_target_ach, nyc_current_purifier_ach
 ))
+# Objects the workers need. Each worker is a fresh R process, so everything
+# run_one() references must either be exported here or recreated by the
+# library() and source() calls below.
+worker_objects <- c(
+  "nyc_parameters_file", "population", "initial_exposed", "simulation_days",
+  "school_ach_scenario", "runs", "base_parameters", "run_one"
+)
+
+# A PSOCK cluster is used rather than parallel::mclapply(), which relies on
+# forking and so is not available on Windows. Tasks are wrapped in try() so that
+# one failure does not abort the batch, matching the check below.
+run_in_parallel <- function(x, fun_name) {
+  workers <- min(n_cores, length(x))
+  if (workers <= 1L) {
+    return(lapply(x, function(i) try(do.call(fun_name, list(i)), silent = TRUE)))
+  }
+  cl <- parallel::makeCluster(workers)
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  parallel::clusterExport(cl, worker_objects, envir = environment())
+  parallel::clusterEvalQ(cl, {
+    library(helios)
+    source(nyc_parameters_file)
+    NULL
+  })
+  parallel::parLapplyLB(cl, x, function(i) try(do.call(fun_name, list(i)), silent = TRUE))
+}
+
 started <- Sys.time()
-outputs <- parallel::mclapply(seq_len(nrow(runs)), run_one, mc.cores = n_cores, mc.preschedule = FALSE)
+outputs <- run_in_parallel(seq_len(nrow(runs)), "run_one")
 failed <- vapply(outputs, inherits, logical(1), what = "try-error")
 if (any(failed)) {
   stop("Simulations failed for runs: ", paste(which(failed), collapse = ", "), "\n", outputs[[which(failed)[1]]])

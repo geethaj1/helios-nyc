@@ -1,0 +1,22 @@
+# Normalise line endings for text so the repository is identical on macOS,
+# Linux and Windows. Git stores LF and checks out the platform's convention.
+* text=auto
+
+*.R text
+*.Rmd text
+*.md text
+*.csv text
+*.txt text
+
+# Binary files must never be passed through line-ending conversion, which would
+# corrupt them. R data files are the important case here: the package datasets
+# are committed, so a mangled .rda breaks the package on checkout.
+*.rda binary
+*.rds binary
+*.RData binary
+*.parquet binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary
+*.zip binary
