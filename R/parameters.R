@@ -66,6 +66,11 @@
 #'
 #' Rendering Parameters
 #' * `render_diagnostics`: FALSE
+#' * `render_age_strata`: FALSE. When TRUE, new infections and new
+#' hospitalisations are additionally rendered separately for each age class, as
+#' `E_new_child`, `E_new_adult`, `E_new_elderly` and the corresponding
+#' `H_new_*` columns. The age-stratified columns sum to their aggregate
+#' counterpart at every rendered timestep.
 #'
 #' Setting-Specific ACH Parameters:
 #' * `setting_specific_ach_workplace`: boolean switch set to TRUE if setting-specific ACH parameterised in the workplace setting using `set_setting_specific_ach()`; default = FALSE
@@ -166,6 +171,7 @@ get_parameters <- function(overrides = list(), archetype = "none") {
     dt = 0.5, # check this as default
     simulation_time = 150,
     render_diagnostics = FALSE,
+    render_age_strata = FALSE,
     household_distribution_country = "USA",
     school_distribution_country = "USA",
     workplace_distribution_country = "USA",

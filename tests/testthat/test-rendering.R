@@ -66,6 +66,45 @@ test_that("run_simulations() correctly renders diagnostic outputs when render_di
   )
 })
 
+test_that("run_simulation() renders age-stratified infections when render_age_strata is switched on", {
+  # Set a seed:
+  set.seed(seed = 12345)
+
+  # Open a parameters list with age-stratified rendering switched on:
+  parameters <- get_parameters(
+    overrides = list(simulation_time = 5, render_age_strata = TRUE)
+  )
+
+  # Run the simulation:
+  output <- run_simulation(parameters_list = parameters)$result
+
+  # Check the age-stratified infection columns are present:
+  age_columns <- c("E_new_child", "E_new_adult", "E_new_elderly")
+  expect_true(all(age_columns %in% names(output)))
+
+  # The age-stratified counts must account for every new infection, so they sum
+  # to the aggregate count at every timestep where infections were rendered:
+  rendered <- !is.na(output$E_new)
+  expect_equal(
+    unname(rowSums(output[rendered, age_columns])),
+    unname(output$E_new[rendered])
+  )
+})
+
+test_that("run_simulation() omits age-stratified columns by default", {
+  # Set a seed:
+  set.seed(seed = 12345)
+
+  # Open a parameters list without age-stratified rendering:
+  parameters <- get_parameters(overrides = list(simulation_time = 5))
+
+  # Run the simulation:
+  output <- run_simulation(parameters_list = parameters)$result
+
+  # Check that no age-stratified columns are rendered:
+  expect_false(any(grepl("_child$|_adult$|_elderly$", names(output))))
+})
+
 test_that("Disease state counts sum to parameters$human population", {
   # Get a list of model parameters:
   parameters <- get_parameters(

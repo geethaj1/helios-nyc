@@ -33,6 +33,45 @@ nyc_school_student_staff_ratio <- with(
   sum(enrollment) / sum(teachers_fte)
 )
 
+# Severity parameters, expressed per infection rather than per symptomatic
+# illness. helios has no asymptomatic class, so every infected individual is
+# counted in the denominator; these values are therefore the CDC per-illness
+# rates multiplied by the symptomatic fraction of infections.
+#
+# Source: CDC estimated influenza burden for the 2018-19 season (Table 1),
+# aggregated into the three helios age classes, giving hospitalisations per
+# symptomatic illness of 0.41% (child), 0.77% (adult) and 9.09% (elderly), and
+# deaths per hospitalisation of 0.95%, 4.55% and 10.41%. A symptomatic fraction
+# of 0.5 is applied to the hospitalisation rates, consistent with the pooled
+# symptomatic and total attack rates reported by Somes et al. (2018),
+# doi:10.1016/j.vaccine.2018.02.013, which imply that roughly 40-56% of
+# influenza infections are symptomatic.
+#
+# CDC age bands do not align exactly with the helios classes: CDC 0-17 is mapped
+# to child (0-18), 18-64 to adult (19-69) and 65+ to elderly (70+), so the adult
+# class absorbs the higher-risk 65-69 year olds and its rate is, if anything,
+# slightly understated.
+#
+# Deaths per hospitalisation are left on the CDC basis, which counts influenza
+# deaths occurring outside hospital as well as in it. This gives about 7%
+# overall, above the 2.2-3.5% in-hospital mortality reported by FluSurv-NET for
+# 2010-2023. Multiply these three values by about 0.4 for a strictly
+# in-hospital interpretation.
+#
+# The helios flu archetype defaults (prob_hosp_adult 0.03, prob_hosp_elderly
+# 0.18, prob_death_hosp_elderly 0.3) produce roughly 3.2% hospitalisations per
+# infection and 15.7% deaths per hospitalisation, both well above the data.
+# They are overridden here rather than in the package so that the archetype
+# retains its upstream values.
+nyc_flu_severity <- list(
+  prob_hosp_child = 0.002,
+  prob_hosp_adult = 0.004,
+  prob_hosp_elderly = 0.045,
+  prob_death_hosp_child = 0.0095,
+  prob_death_hosp_adult = 0.0455,
+  prob_death_hosp_elderly = 0.104
+)
+
 apply_nyc_parameters <- function(parameters_list, school_ach_scenario = "batterman") {
   if (!(school_ach_scenario %in% names(nyc_school_ach_scenarios))) {
     stop(
@@ -48,6 +87,9 @@ apply_nyc_parameters <- function(parameters_list, school_ach_scenario = "batterm
     sd = school_ach$sd
   )
   parameters_list$school_student_staff_ratio <- nyc_school_student_staff_ratio
+  for (parameter_name in names(nyc_flu_severity)) {
+    parameters_list[[parameter_name]] <- nyc_flu_severity[[parameter_name]]
+  }
   parameters_list
 }
 

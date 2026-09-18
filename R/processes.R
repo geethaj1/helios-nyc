@@ -467,6 +467,23 @@ create_SE_process <- function(
     # Render the number of people going from susceptible to infected:
     renderer$render('E_new', S$size(), t)
 
+    # Render newly infected individuals separately by age class. The bitset is
+    # copied before intersecting because and() modifies in place and S is still
+    # needed below to queue the disease state update.
+    if (parameters_list$render_age_strata) {
+      for (age_class in c("child", "adult", "elderly")) {
+        newly_infected_in_age_class <- S$copy()
+        newly_infected_in_age_class$and(
+          variables_list$age_class$get_index_of(age_class)
+        )
+        renderer$render(
+          paste0("E_new_", age_class),
+          newly_infected_in_age_class$size(),
+          t
+        )
+      }
+    }
+
     # Queue an update to the infectious state of the newly infected susceptible individuals to Exposed:
     variables_list$disease_state$queue_update(value = "E", index = S)
   }
@@ -547,6 +564,15 @@ create_EI_process <- function(
 
     # Count new hospitalizations at the moment severity is decided
     renderer$render("H_new", sum(hosp_mask), t)
+
+    # Render new hospitalisations separately by age class. The age class index
+    # vectors are already computed above for the hospitalisation probability
+    # split, so no further lookups are needed.
+    if (parameters_list$render_age_strata) {
+      renderer$render("H_new_child", sum(hosp_mask & (E_idx %in% child_idx)), t)
+      renderer$render("H_new_adult", sum(hosp_mask & (E_idx %in% adult_idx)), t)
+      renderer$render("H_new_elderly", sum(hosp_mask & (E_idx %in% elderly_idx)), t)
+    }
   }
 }
 
@@ -719,5 +745,23 @@ create_external_source_process <- function(
 
     # Render the number of individuals infected through the external mechanism
     renderer$render('n_external_infections', S_endemic$size(), t)
+
+    # Render externally infected individuals separately by age class. External
+    # infection is a separate susceptible to exposed path from the within
+    # population infection process, so it must be counted here as well for the
+    # age-stratified totals to account for every infection.
+    if (parameters_list$render_age_strata) {
+      for (age_class in c("child", "adult", "elderly")) {
+        externally_infected_in_age_class <- S_endemic$copy()
+        externally_infected_in_age_class$and(
+          variables_list$age_class$get_index_of(age_class)
+        )
+        renderer$render(
+          paste0("n_external_infections_", age_class),
+          externally_infected_in_age_class$size(),
+          t
+        )
+      }
+    }
   }
 }
